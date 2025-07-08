@@ -41,8 +41,8 @@ public class Seller {
         // Initialize inventory from config
         initializeInventory(config);
         
-        // Bind to port (each seller on different port)
-        int port = 5556 + Integer.parseInt(sellerId.substring(1)); // S1 -> 5557, S2 -> 5558, etc.
+        // PORT-SCHEMA: S1=5570, S2=5571, S3=5572, etc.
+        int port = 5569 + Integer.parseInt(sellerId.substring(1)); // S1 -> 5570, S2 -> 5571, etc.
         String bindAddress = "tcp://*:" + port;
         socket.bind(bindAddress);
         

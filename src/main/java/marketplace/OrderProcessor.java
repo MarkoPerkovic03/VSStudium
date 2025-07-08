@@ -31,11 +31,12 @@ public class OrderProcessor {
     }
     
     private void initializeSellerAddresses() {
-        sellerAddresses.put("S1", "tcp://localhost:5557");
-        sellerAddresses.put("S2", "tcp://localhost:5558");
-        sellerAddresses.put("S3", "tcp://localhost:5559");
-        sellerAddresses.put("S4", "tcp://localhost:5560");
-        sellerAddresses.put("S5", "tcp://localhost:5561");
+        // NEUE PORT-SCHEMA: S1=5570, S2=5571, etc.
+        sellerAddresses.put("S1", "tcp://localhost:5570");
+        sellerAddresses.put("S2", "tcp://localhost:5571");
+        sellerAddresses.put("S3", "tcp://localhost:5572");
+        sellerAddresses.put("S4", "tcp://localhost:5573");
+        sellerAddresses.put("S5", "tcp://localhost:5574");
     }
     
     public void processOrder(Order order) {
@@ -71,7 +72,7 @@ public class OrderProcessor {
             SystemMonitor.getInstance().orderFailed(order.getOrderId(), "Exception: " + throwable.getMessage());
             sagaCoordinator.completeTransaction(order.getOrderId());
             return null;
-        }); // <- DIESE KLAMMER UND SEMIKOLON FEHLTEN!
+        });
     }
     
     private CompletableFuture<Boolean> reserveProducts(Order order) {

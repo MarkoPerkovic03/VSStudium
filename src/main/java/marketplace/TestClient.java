@@ -18,14 +18,28 @@ public class TestClient {
         System.out.println("=== Distributed Marketplace Test Client ===");
         System.out.println();
         
+        // MARKETPLACE AUSWAHL
+        String marketplacePort = "5555"; // Default MP1
+        String marketplaceId = "MP1";
+        
+        if (args.length > 0) {
+            marketplaceId = args[0];
+            int portNumber = 5554 + Integer.parseInt(marketplaceId.substring(2));
+            marketplacePort = String.valueOf(portNumber);
+            System.out.println("Connecting to " + marketplaceId + " on port " + marketplacePort);
+        } else {
+            System.out.println("Connecting to MP1 on port 5555 (default)");
+            System.out.println("To connect to MP2: java -cp target/distributed-marketplace-1.0-SNAPSHOT.jar marketplace.TestClient MP2");
+        }
+        
         try (ZContext context = new ZContext();
              Scanner scanner = new Scanner(System.in)) {
             
             ZMQ.Socket socket = context.createSocket(SocketType.REQ);
-            socket.connect("tcp://localhost:5555");
+            socket.connect("tcp://localhost:" + marketplacePort);
             socket.setReceiveTimeOut(5000); // 5 second timeout
             
-            System.out.println("Connected to Marketplace on tcp://localhost:5555");
+            System.out.println("Connected to Marketplace " + marketplaceId + " on tcp://localhost:" + marketplacePort);
             System.out.println();
             
             while (true) {
