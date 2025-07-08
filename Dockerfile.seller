@@ -1,0 +1,18 @@
+FROM openjdk:21-jre-slim
+
+WORKDIR /app
+
+# Copy JAR file  
+COPY target/distributed-marketplace-1.0-SNAPSHOT.jar app.jar
+
+# Copy config files
+COPY config/ config/
+
+# Expose port range for sellers
+EXPOSE 5570-5579
+
+# Environment variable for seller ID
+ENV SELLER_ID=S1
+
+# Run seller
+ENTRYPOINT ["java", "-cp", "app.jar", "seller.Seller", "${SELLER_ID}"]
