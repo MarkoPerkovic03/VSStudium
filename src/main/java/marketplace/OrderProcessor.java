@@ -66,12 +66,12 @@ public class OrderProcessor {
             sagaCoordinator.completeTransaction(order.getOrderId());
         }).exceptionally(throwable -> {
             long processingTime = System.currentTimeMillis() - startTime;
-            System.err.println("Error in SAGA for order " + order.getOrderId() + ": " + throwable.getMessage());
+            System.err.println("Error in SAGA for order " + order.getOrderId() + " (processing time: " + processingTime + "ms): " + throwable.getMessage());
             rollbackOrder(order);
             SystemMonitor.getInstance().orderFailed(order.getOrderId(), "Exception: " + throwable.getMessage());
             sagaCoordinator.completeTransaction(order.getOrderId());
             return null;
-        });
+        }); // <- DIESE KLAMMER UND SEMIKOLON FEHLTEN!
     }
     
     private CompletableFuture<Boolean> reserveProducts(Order order) {

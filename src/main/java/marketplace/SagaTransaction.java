@@ -3,7 +3,7 @@ package marketplace;
 import java.util.*;
 
 public class SagaTransaction {
-    private String orderId;
+    private final String orderId;  // final hinzugefügt
     private Map<String, Boolean> productStatus = new HashMap<>();
     private boolean completed = false;
 
@@ -12,6 +12,11 @@ public class SagaTransaction {
         for (String pid : productIds) {
             productStatus.put(pid, false);
         }
+    }
+
+    // Getter hinzugefügt um "unused field" Warnung zu beheben
+    public String getOrderId() {
+        return orderId;
     }
 
     public void confirmProduct(String productId) {
@@ -36,5 +41,11 @@ public class SagaTransaction {
 
     public boolean anyRejected() {
         return productStatus.values().stream().anyMatch(v -> !v);
+    }
+    
+    @Override
+    public String toString() {
+        return "SagaTransaction{orderId='" + orderId + "', completed=" + completed + 
+               ", productStatus=" + productStatus + "}";
     }
 }

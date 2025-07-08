@@ -10,11 +10,8 @@ C:\Users\Marko Perkovic\OneDrive\Documents\VSCode\src\main\java\monitoring\LoadT
 C:\Users\Marko Perkovic\OneDrive\Documents\VSCode\src\main\java\monitoring\SystemMonitor.java
 C:\Users\Marko Perkovic\OneDrive\Documents\VSCode\src\main\java\network\Configuration.java
 C:\Users\Marko Perkovic\OneDrive\Documents\VSCode\src\main\java\network\FailureSimulator.java
-C:\Users\Marko Perkovic\OneDrive\Documents\VSCode\src\main\java\network\MarketplaceException.java
 C:\Users\Marko Perkovic\OneDrive\Documents\VSCode\src\main\java\network\Message.java
 C:\Users\Marko Perkovic\OneDrive\Documents\VSCode\src\main\java\network\MessageType.java
-C:\Users\Marko Perkovic\OneDrive\Documents\VSCode\src\main\java\network\RetryableOperation.java
-C:\Users\Marko Perkovic\OneDrive\Documents\VSCode\src\main\java\network\ZMQConnectionPool.java
 C:\Users\Marko Perkovic\OneDrive\Documents\VSCode\src\main\java\seller\Product.java
 C:\Users\Marko Perkovic\OneDrive\Documents\VSCode\src\main\java\seller\ProductInventory.java
 C:\Users\Marko Perkovic\OneDrive\Documents\VSCode\src\main\java\seller\ReservationRecord.java
