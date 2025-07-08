@@ -41,20 +41,20 @@ public class LoadTestRunner {
                     Order order = OrderGenerator.generateOrder();
                     String orderJson = gson.toJson(order);
                     
-                    System.out.println("[Thread-" + Thread.currentThread().getId() + "] Sending order #" + orderNum + ": " + order.getOrderId());
+                    System.out.println("[Thread-" + Thread.currentThread().threadId() + "] Sending order #" + orderNum + ": " + order.getOrderId());
                     
                     socket.send(orderJson);
                     String response = socket.recvStr();
                     
                     if (response != null) {
                         successfulOrders.incrementAndGet();
-                        System.out.println("[Thread-" + Thread.currentThread().getId() + "] Order #" + orderNum + " SUCCESS: " + response);
+                        System.out.println("[Thread-" + Thread.currentThread().threadId() + "] Order #" + orderNum + " SUCCESS: " + response);
                     } else {
-                        System.err.println("[Thread-" + Thread.currentThread().getId() + "] Order #" + orderNum + " TIMEOUT");
+                        System.err.println("[Thread-" + Thread.currentThread().threadId() + "] Order #" + orderNum + " TIMEOUT");
                     }
                     
                 } catch (Exception e) {
-                    System.err.println("[Thread-" + Thread.currentThread().getId() + "] Order #" + orderNum + " ERROR: " + e.getMessage());
+                    System.err.println("[Thread-" + Thread.currentThread().threadId() + "] Order #" + orderNum + " ERROR: " + e.getMessage());
                 } finally {
                     int completed = completedOrders.incrementAndGet();
                     if (completed % 10 == 0) {

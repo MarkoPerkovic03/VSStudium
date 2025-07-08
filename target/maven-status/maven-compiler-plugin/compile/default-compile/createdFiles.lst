@@ -3,7 +3,9 @@ marketplace\SagaTransaction.class
 seller\Seller.class
 network\Configuration.class
 marketplace\TestClient.class
+network\MarketplaceException.class
 common\OrderItem.class
+network\ZMQConnectionPool.class
 common\Order.class
 marketplace\OrderProcessor.class
 seller\Product.class
