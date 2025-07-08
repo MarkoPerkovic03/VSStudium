@@ -4,8 +4,6 @@ import common.Order;
 import common.OrderItem;
 import network.Message;
 import network.MessageType;
-import network.MarketplaceException;
-import network.RetryableOperation;
 import monitoring.SystemMonitor;
 import org.zeromq.SocketType;
 import org.zeromq.ZMQ;
@@ -21,7 +19,6 @@ public class OrderProcessor {
     private final SagaCoordinator sagaCoordinator;
     private final ExecutorService executorService;
     private final Map<String, String> sellerAddresses;
-    private final RetryableOperation retryableOperation;
     
     public OrderProcessor(SagaCoordinator sagaCoordinator) {
         this.context = new ZContext();
@@ -29,14 +26,11 @@ public class OrderProcessor {
         this.sagaCoordinator = sagaCoordinator;
         this.executorService = Executors.newCachedThreadPool();
         this.sellerAddresses = new HashMap<>();
-        this.retryableOperation = new RetryableOperation(3, 1000, 2.0, 5000);
         
-        // Initialize seller addresses (in real system, this would be from service discovery)
         initializeSellerAddresses();
     }
     
     private void initializeSellerAddresses() {
-        // Map seller IDs to their ZeroMQ addresses
         sellerAddresses.put("S1", "tcp://localhost:5557");
         sellerAddresses.put("S2", "tcp://localhost:5558");
         sellerAddresses.put("S3", "tcp://localhost:5559");
@@ -44,16 +38,12 @@ public class OrderProcessor {
         sellerAddresses.put("S5", "tcp://localhost:5561");
     }
     
-    /**
-     * Process an order using SAGA pattern
-     */
     public void processOrder(Order order) {
         long startTime = System.currentTimeMillis();
         SystemMonitor.getInstance().orderReceived();
         
         System.out.println("Starting SAGA for order: " + order.getOrderId());
         
-        // Create SAGA transaction
         List<String> productIds = order.getItems().stream()
             .map(OrderItem::getProductId)
             .toList();
@@ -61,10 +51,8 @@ public class OrderProcessor {
         SagaTransaction saga = new SagaTransaction(order.getOrderId(), productIds);
         sagaCoordinator.startTransaction(order.getOrderId(), saga);
         
-        // Phase 1: Reserve all products
         CompletableFuture<Boolean> reservationFuture = reserveProducts(order);
         
-        // Phase 2: Commit or Rollback based on reservation results
         reservationFuture.thenAccept(success -> {
             long processingTime = System.currentTimeMillis() - startTime;
             
@@ -86,13 +74,9 @@ public class OrderProcessor {
         });
     }
     
-    /**
-     * Phase 1: Reserve products from all sellers
-     */
     private CompletableFuture<Boolean> reserveProducts(Order order) {
         List<CompletableFuture<Boolean>> reservationFutures = new ArrayList<>();
         
-        // Group items by seller (simplified: each product type has a designated seller)
         Map<String, List<OrderItem>> itemsBySeller = groupItemsBySeller(order.getItems());
         
         for (Map.Entry<String, List<OrderItem>> entry : itemsBySeller.entrySet()) {
@@ -105,14 +89,10 @@ public class OrderProcessor {
             reservationFutures.add(future);
         }
         
-        // Wait for all reservations to complete
         return CompletableFuture.allOf(reservationFutures.toArray(new CompletableFuture[0]))
             .thenApply(v -> reservationFutures.stream().allMatch(CompletableFuture::join));
     }
     
-    /**
-     * Reserve products from a specific seller with enhanced error handling and retry logic
-     */
     private boolean reserveFromSeller(String sellerId, List<OrderItem> items, String orderId) {
         String sellerAddress = sellerAddresses.get(sellerId);
         if (sellerAddress == null) {
@@ -120,71 +100,46 @@ public class OrderProcessor {
             return false;
         }
         
-        try {
-            return retryableOperation.executeWithRetry(() -> {
-                try (ZMQ.Socket socket = context.createSocket(SocketType.REQ)) {
-                    socket.connect(sellerAddress);
-                    socket.setReceiveTimeOut(3000); // 3 second timeout
-                    
-                    boolean allReserved = true;
-                    
-                    for (OrderItem item : items) {
-                        // Track reservation attempt
-                        SystemMonitor.getInstance().reservationAttempted(sellerId, item.getProductId(), item.getQuantity());
-                        
-                        // Send reservation request
-                        String payload = item.getProductId() + ":" + item.getQuantity();
-                        Message request = new Message(MessageType.RESERVE_PRODUCT, payload, orderId);
-                        
-                        System.out.println("Sending to " + sellerId + ": " + gson.toJson(request));
-                        
-                        if (!socket.send(gson.toJson(request))) {
-                            SystemMonitor.getInstance().networkError(sellerId, "Failed to send message");
-                            throw new RuntimeException("Failed to send message to " + sellerId);
-                        }
-                        
-                        // Receive response
-                        String responseJson = socket.recvStr();
-                        if (responseJson == null) {
-                            SystemMonitor.getInstance().sellerTimeout(sellerId, "RESERVE_PRODUCT");
-                            throw new RuntimeException("Timeout waiting for response from " + sellerId);
-                        }
-                        
-                        try {
-                            Message response = gson.fromJson(responseJson, Message.class);
-                            System.out.println("Response from " + sellerId + ": " + responseJson);
-                            
-                            if (response.getType() != MessageType.RESERVE_CONFIRM) {
-                                System.out.println("Reservation REJECTED by " + sellerId + " for " + item.getProductId());
-                                SystemMonitor.getInstance().reservationFailed(sellerId, item.getProductId(), item.getQuantity(), "Rejected by seller");
-                                allReserved = false;
-                                break;
-                            }
-                            
-                            System.out.println("Reservation CONFIRMED by " + sellerId + " for " + item.getProductId());
-                            SystemMonitor.getInstance().reservationSucceeded(sellerId, item.getProductId(), item.getQuantity());
-                            
-                        } catch (Exception jsonException) {
-                            System.err.println("Invalid JSON response from " + sellerId + ": " + responseJson);
-                            SystemMonitor.getInstance().networkError(sellerId, "Invalid JSON response");
-                            throw new RuntimeException("Invalid JSON response from " + sellerId);
-                        }
-                    }
-                    
-                    return allReserved;
-                }
-            }, "reserveFromSeller-" + sellerId);
+        try (ZMQ.Socket socket = context.createSocket(SocketType.REQ)) {
+            socket.connect(sellerAddress);
+            socket.setReceiveTimeOut(3000);
             
-        } catch (MarketplaceException e) {
-            System.err.println("Failed to reserve from seller " + sellerId + " after retries: " + e.getMessage());
-            SystemMonitor.getInstance().networkError(sellerId, "Reservation failed after retries: " + e.getMessage());
+            boolean allReserved = true;
+            
+            for (OrderItem item : items) {
+                String payload = item.getProductId() + ":" + item.getQuantity();
+                Message request = new Message(MessageType.RESERVE_PRODUCT, payload, orderId);
+                
+                System.out.println("Sending to " + sellerId + ": " + gson.toJson(request));
+                socket.send(gson.toJson(request));
+                
+                String responseJson = socket.recvStr();
+                if (responseJson == null) {
+                    System.err.println("Timeout waiting for response from " + sellerId);
+                    allReserved = false;
+                    break;
+                }
+                
+                Message response = gson.fromJson(responseJson, Message.class);
+                System.out.println("Response from " + sellerId + ": " + responseJson);
+                
+                if (response.getType() != MessageType.RESERVE_CONFIRM) {
+                    System.out.println("Reservation REJECTED by " + sellerId + " for " + item.getProductId());
+                    allReserved = false;
+                    break;
+                }
+                
+                System.out.println("Reservation CONFIRMED by " + sellerId + " for " + item.getProductId());
+            }
+            
+            return allReserved;
+            
+        } catch (Exception e) {
+            System.err.println("Error communicating with seller " + sellerId + ": " + e.getMessage());
             return false;
         }
     }
     
-    /**
-     * Phase 2A: Commit the order (all reservations successful)
-     */
     private void commitOrder(Order order) {
         System.out.println("COMMITTING order: " + order.getOrderId());
         
@@ -197,9 +152,6 @@ public class OrderProcessor {
         System.out.println("✅ Order " + order.getOrderId() + " SUCCESSFULLY COMPLETED!");
     }
     
-    /**
-     * Phase 2B: Rollback the order (some reservations failed)
-     */
     private void rollbackOrder(Order order) {
         System.out.println("ROLLING BACK order: " + order.getOrderId());
         
@@ -207,7 +159,6 @@ public class OrderProcessor {
         
         for (String sellerId : itemsBySeller.keySet()) {
             CompletableFuture.runAsync(() -> sendRollbackToSeller(sellerId, order.getOrderId()), executorService);
-            SystemMonitor.getInstance().rollbackExecuted(order.getOrderId(), sellerId);
         }
         
         System.out.println("❌ Order " + order.getOrderId() + " ROLLED BACK!");
@@ -228,40 +179,25 @@ public class OrderProcessor {
             return;
         }
         
-        try {
-            retryableOperation.executeWithSimpleRetry(() -> {
-                try (ZMQ.Socket socket = context.createSocket(SocketType.REQ)) {
-                    socket.connect(sellerAddress);
-                    socket.setReceiveTimeOut(3000);
-                    
-                    Message message = new Message(messageType, action, orderId);
-                    
-                    if (!socket.send(gson.toJson(message))) {
-                        throw new RuntimeException("Failed to send " + action + " to " + sellerId);
-                    }
-                    
-                    String response = socket.recvStr();
-                    if (response != null) {
-                        System.out.println("Seller " + sellerId + " " + action + " response: " + response);
-                    } else {
-                        System.err.println("Timeout waiting for " + action + " response from " + sellerId);
-                        SystemMonitor.getInstance().sellerTimeout(sellerId, action.toUpperCase());
-                    }
-                    
-                    return null; // Void return for Supplier
-                }
-            }, "sendTransactionMessage-" + action + "-" + sellerId, 2);
+        try (ZMQ.Socket socket = context.createSocket(SocketType.REQ)) {
+            socket.connect(sellerAddress);
+            socket.setReceiveTimeOut(3000);
             
-        } catch (MarketplaceException e) {
+            Message message = new Message(messageType, action, orderId);
+            socket.send(gson.toJson(message));
+            
+            String response = socket.recvStr();
+            if (response != null) {
+                System.out.println("Seller " + sellerId + " " + action + " response: " + response);
+            } else {
+                System.err.println("Timeout waiting for " + action + " response from " + sellerId);
+            }
+            
+        } catch (Exception e) {
             System.err.println("Error sending " + action + " to seller " + sellerId + ": " + e.getMessage());
-            SystemMonitor.getInstance().networkError(sellerId, "Failed to send " + action + ": " + e.getMessage());
         }
     }
     
-    /**
-     * Simple mapping: P1,P2 -> S1, P3,P4 -> S2, P5 -> S3, etc.
-     * In a real system, this would be more sophisticated
-     */
     private Map<String, List<OrderItem>> groupItemsBySeller(List<OrderItem> items) {
         Map<String, List<OrderItem>> result = new HashMap<>();
         
@@ -274,85 +210,16 @@ public class OrderProcessor {
     }
     
     private String getSellerForProduct(String productId) {
-        // Simple mapping for demo - as per assignment requirements
         return switch (productId) {
             case "P1", "P2" -> "S1";
             case "P3", "P4" -> "S2";
             case "P5" -> "S3";
-            default -> "S1"; // fallback
+            default -> "S1";
         };
     }
     
-    /**
-     * Add seller to the system (for dynamic seller registration)
-     */
-    public void addSeller(String sellerId, String address) {
-        sellerAddresses.put(sellerId, address);
-        System.out.println("Added seller " + sellerId + " at " + address);
-    }
-    
-    /**
-     * Remove seller from the system
-     */
-    public void removeSeller(String sellerId) {
-        sellerAddresses.remove(sellerId);
-        System.out.println("Removed seller " + sellerId);
-    }
-    
-    /**
-     * Get current seller addresses for monitoring
-     */
-    public Map<String, String> getSellerAddresses() {
-        return new HashMap<>(sellerAddresses);
-    }
-    
-    /**
-     * Health check for sellers
-     */
-    public Map<String, Boolean> checkSellerHealth() {
-        Map<String, Boolean> healthStatus = new HashMap<>();
-        
-        for (Map.Entry<String, String> entry : sellerAddresses.entrySet()) {
-            String sellerId = entry.getKey();
-            String address = entry.getValue();
-            
-            try {
-                // Simple health check by sending a heartbeat
-                boolean isHealthy = retryableOperation.executeWithRetry(() -> {
-                    try (ZMQ.Socket socket = context.createSocket(SocketType.REQ)) {
-                        socket.connect(address);
-                        socket.setReceiveTimeOut(1000); // 1 second for health check
-                        
-                        Message heartbeat = new Message(MessageType.HEARTBEAT, "ping", "health-check");
-                        socket.send(gson.toJson(heartbeat));
-                        
-                        String response = socket.recvStr();
-                        return response != null;
-                    }
-                }, "healthCheck-" + sellerId);
-                
-                healthStatus.put(sellerId, isHealthy);
-                
-            } catch (MarketplaceException e) {
-                healthStatus.put(sellerId, false);
-                System.err.println("Health check failed for seller " + sellerId + ": " + e.getMessage());
-            }
-        }
-        
-        return healthStatus;
-    }
-    
     public void shutdown() {
-        System.out.println("Shutting down OrderProcessor...");
         executorService.shutdown();
-        try {
-            if (!executorService.awaitTermination(30, TimeUnit.SECONDS)) {
-                executorService.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            executorService.shutdownNow();
-        }
         context.close();
-        System.out.println("OrderProcessor shutdown complete");
     }
 }
